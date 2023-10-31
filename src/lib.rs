@@ -130,7 +130,7 @@ impl WebViewPlugin {
 
     fn on_webview_reposition(
         registry: NonSendMut<WebViewRegistry>,
-        mut query: Query<
+        query: Query<
             (&WebViewHandle, &GlobalTransform),
             (With<WebViewMarker>, Changed<GlobalTransform>),
         >,
@@ -149,7 +149,7 @@ impl WebViewPlugin {
 
     fn on_webview_redirect(
         registry: NonSendMut<WebViewRegistry>,
-        mut query: Query<
+        query: Query<
             (&WebViewHandle, &WebViewLocation),
             (With<WebViewMarker>, Changed<WebViewLocation>),
         >,
@@ -166,15 +166,21 @@ impl WebViewPlugin {
     fn on_window_resize(
         e: EventReader<WindowResized>,
         registry: NonSendMut<WebViewRegistry>,
-        mut query: Query<(&WebViewHandle, &Node), With<WebViewHandle>>,
+        window: Query<&Window, With<PrimaryWindow>>,
+        query: Query<(&WebViewHandle, &Node, &GlobalTransform), With<WebViewHandle>>,
     ) {
         if !e.is_empty() {
-            for (handle, size) in &query {
+            let window_resolution = window.single().resolution.clone();
+            for (handle, size, position) in &query {
                 let size = size.size();
+                let final_position = (
+                    (position.translation().x - size.x / 2.0) as i32,
+                    ((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
+                );
                 handle
                     .map(|x| registry.get(x))
                     .flatten()
-                    .map(|webview| webview.set_size((size.x as u32, size.y as u32)));
+                    .map(|webview| webview.set_position(final_position));
             }
         }
     }
