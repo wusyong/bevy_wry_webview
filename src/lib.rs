@@ -87,8 +87,9 @@ impl WebViewPlugin {
                     let size = size.size();
                     let final_position = (
                         (position.translation().x - size.x / 2.0) as i32,
-                        ((window_resolution.height() - position.translation().y) - size.y / 2.0)
-                            as i32,
+                        (position.translation().y - size.y / 2.0) as i32,
+                        //((window_resolution.height() - position.translation().y) - size.y / 2.0)
+                        //    as i32,
                     );
 
                     //println!("{:?}", final_position == (0, 320));
@@ -131,17 +132,20 @@ impl WebViewPlugin {
     fn on_webview_reposition(
         registry: NonSendMut<WebViewRegistry>,
         query: Query<
-            (&WebViewHandle, &GlobalTransform),
+            (&WebViewHandle, &GlobalTransform, &Node),
             (With<WebViewMarker>, Changed<GlobalTransform>),
         >,
     ) {
-        for (handle, position) in query.iter() {
+        for (handle, position, size) in query.iter() {
+            let size = size.size();
             handle.map(|x| {
                 registry.get(x).map(|webview| {
-                    webview.set_position((
-                        position.translation().x as i32,
-                        position.translation().y as i32,
-                    ))
+                    let final_position = (
+                        (position.translation().x - size.x / 2.0) as i32,
+                        (position.translation().y - size.y / 2.0) as i32,
+                        //((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
+                    );
+                    webview.set_position(final_position)
                 })
             });
         }
@@ -175,7 +179,8 @@ impl WebViewPlugin {
                 let size = size.size();
                 let final_position = (
                     (position.translation().x - size.x / 2.0) as i32,
-                    ((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
+                    (position.translation().y - size.y / 2.0) as i32,
+                    //((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
                 );
                 handle
                     .map(|x| registry.get(x))

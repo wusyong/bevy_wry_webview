@@ -1,11 +1,12 @@
 use bevy::prelude::*;
-use bevy_wry_webview::{UiWebViewBundle, WebViewPlugin};
+use bevy_wry_webview::{UiWebViewBundle, WebViewLocation, WebViewMarker, WebViewPlugin};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(WebViewPlugin)
         .add_systems(Startup, setup)
+        .add_systems(Update, moving_webview)
         .run();
 }
 
@@ -18,13 +19,16 @@ fn setup(
     commands.spawn(UiWebViewBundle {
         node_bundle: NodeBundle {
             style: Style {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
                 width: Val::Px(400.0),
                 height: Val::Px(400.0),
                 ..Default::default()
             },
-            background_color: Color::YELLOW.into(),
             ..Default::default()
         },
+        location: WebViewLocation("https://tauri.app/".to_owned()),
         ..Default::default()
     });
 
@@ -56,4 +60,17 @@ fn setup(
         transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
+}
+
+fn moving_webview(time: Res<Time>, mut query: Query<&mut Style, With<WebViewMarker>>) {
+    let mut style = query.single_mut();
+
+    let top = Val::Px(((time.elapsed_seconds().sin() / 2.0) + 0.5) * 300.0);
+    let left = Val::Px(((time.elapsed_seconds().cos() / 2.0) + 0.5) * 300.0);
+
+    *style = Style {
+        top,
+        left,
+        ..style.clone()
+    }
 }
