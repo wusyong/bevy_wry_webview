@@ -28,7 +28,43 @@ fn setup(
             },
             ..Default::default()
         },
-        location: WebViewLocation("https://tauri.app/".to_owned()),
+        location: WebViewLocation::Html(
+            r#"
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body>
+        <div id="ele">
+            <div>Positioned element on transparent background</div>
+        </div>
+    </body>
+    <style>
+html, body {
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(255, 192, 203, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#ele {
+    background-color: blue;
+    color: white;
+    width: 50%;
+    height: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+    </style>
+</html>
+                      "#
+            .to_owned(),
+        ),
         ..Default::default()
     });
 
@@ -65,8 +101,8 @@ fn setup(
 fn moving_webview(time: Res<Time>, mut query: Query<&mut Style, With<WebViewMarker>>) {
     let mut style = query.single_mut();
 
-    let top = Val::Px(((time.elapsed_seconds().sin() / 2.0) + 0.5) * 300.0);
-    let left = Val::Px(((time.elapsed_seconds().cos() / 2.0) + 0.5) * 300.0);
+    let top = Val::Px(((time.elapsed_seconds().sin() / 2.0) + 0.5) * 500.0);
+    let left = Val::Px(((time.elapsed_seconds().cos() / 2.0) + 0.5) * 500.0);
 
     *style = Style {
         top,

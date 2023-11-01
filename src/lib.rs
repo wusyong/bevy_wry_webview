@@ -10,8 +10,11 @@ use bevy::{
 
 pub struct WebViewPlugin;
 
-#[derive(Component, Debug, Deref, DerefMut)]
-pub struct WebViewLocation(pub String);
+#[derive(Component, Debug)]
+pub enum WebViewLocation {
+    Url(String),
+    Html(String),
+}
 
 #[derive(Component)]
 pub struct WebViewMarker;
@@ -37,7 +40,7 @@ impl Default for UiWebViewBundle {
     fn default() -> Self {
         UiWebViewBundle {
             node_bundle: default(),
-            location: WebViewLocation("https://google.com/".to_owned()),
+            location: WebViewLocation::Html("".to_owned()),
             handle: WebViewHandle(None),
             marker: WebViewMarker,
         }
@@ -53,6 +56,7 @@ impl Plugin for WebViewPlugin {
                     Self::on_webview_spawn,
                     Self::on_webview_resize,
                     Self::on_webview_reposition,
+                    Self::on_webview_redirect,
                     Self::on_window_resize,
                 ),
             );
@@ -63,7 +67,6 @@ impl WebViewPlugin {
     fn on_webview_spawn(
         mut registry: NonSendMut<WebViewRegistry>,
         window_handle: Query<&RawHandleWrapper>,
-        window: Query<&Window, With<PrimaryWindow>>,
         mut query: Query<
             (
                 &mut WebViewHandle,
@@ -79,7 +82,6 @@ impl WebViewPlugin {
             .get_single()
             .map(|x| x.window_handle)
             .map(|window_handle| {
-                let window_resolution = window.single().resolution.clone();
                 for (mut handle, location, size, position) in
                     query.iter_mut().filter(|(x, _, _, _)| x.is_none())
                 // && v.is_visible())
@@ -96,12 +98,17 @@ impl WebViewPlugin {
                     //(0, 320); // Uncommenting this line fixes the issue apparently. Why is
                     // completely beyond me.
                     //let final_position = (0, 320);
-                    let webview = WebViewBuilder::new_as_child(unsafe {
-                        &WindowHandle::borrow_raw(window_handle, ActiveHandle::new())
-                    })
-                    .with_position(final_position)
-                    .with_size((size.x as u32, size.y as u32))
-                    .with_url(location)
+                    let borrowed_handle =
+                        unsafe { &WindowHandle::borrow_raw(window_handle, ActiveHandle::new()) };
+                    let webview = WebViewBuilder::new_as_child(&borrowed_handle)
+                        .with_position(final_position)
+                        .with_transparent(true)
+                        .with_size((size.x as u32, size.y as u32));
+
+                    let webview = match location {
+                        WebViewLocation::Url(url) => webview.with_url(url),
+                        WebViewLocation::Html(html) => webview.with_html(html),
+                    }
                     .unwrap()
                     .build()
                     .unwrap();
@@ -112,7 +119,7 @@ impl WebViewPlugin {
             });
     }
 
-    fn on_webview_despawn() {
+    fn _on_webview_despawn() {
         todo!("Despawn wry webview attached to bundle")
     }
 
@@ -160,9 +167,12 @@ impl WebViewPlugin {
     ) {
         for (handle, location) in query.iter() {
             handle.map(|x| {
-                registry
-                    .get(x)
-                    .map(|webview| todo!("Make webview go to location"))
+                registry.get(x).map(|webview| match location {
+                    WebViewLocation::Url(url) => webview.load_url(url),
+                    WebViewLocation::Html(_html) => {
+                        // TODO Implement HTML loading past builder
+                    }
+                })
             });
         }
     }
@@ -170,17 +180,14 @@ impl WebViewPlugin {
     fn on_window_resize(
         e: EventReader<WindowResized>,
         registry: NonSendMut<WebViewRegistry>,
-        window: Query<&Window, With<PrimaryWindow>>,
         query: Query<(&WebViewHandle, &Node, &GlobalTransform), With<WebViewHandle>>,
     ) {
         if !e.is_empty() {
-            let window_resolution = window.single().resolution.clone();
             for (handle, size, position) in &query {
                 let size = size.size();
                 let final_position = (
                     (position.translation().x - size.x / 2.0) as i32,
                     (position.translation().y - size.y / 2.0) as i32,
-                    //((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
                 );
                 handle
                     .map(|x| registry.get(x))
