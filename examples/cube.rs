@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use bevy_wry_webview::{UiWebViewBundle, WebViewLocation, WebViewMarker, WebViewPlugin};
+use bevy_wry_webview::{
+    UiWebViewBundle, WebViewDespawning, WebViewLocation, WebViewMarker, WebViewPlugin,
+};
 
 fn main() {
     App::new()
@@ -99,14 +101,14 @@ html, body {
 }
 
 fn moving_webview(time: Res<Time>, mut query: Query<&mut Style, With<WebViewMarker>>) {
-    let mut style = query.single_mut();
+    let _ = query.get_single_mut().map(|mut style| {
+        let top = Val::Px(((time.elapsed_seconds().sin() / 2.0) + 0.5) * 500.0);
+        let left = Val::Px(((time.elapsed_seconds().cos() / 2.0) + 0.5) * 500.0);
 
-    let top = Val::Px(((time.elapsed_seconds().sin() / 2.0) + 0.5) * 500.0);
-    let left = Val::Px(((time.elapsed_seconds().cos() / 2.0) + 0.5) * 500.0);
-
-    *style = Style {
-        top,
-        left,
-        ..style.clone()
-    }
+        *style = Style {
+            top,
+            left,
+            ..style.clone()
+        };
+    });
 }

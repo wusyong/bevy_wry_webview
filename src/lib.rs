@@ -4,6 +4,7 @@ use wry::{
 };
 
 use bevy::{
+    ecs::system::Command,
     prelude::*,
     window::{PrimaryWindow, RawHandleWrapper, WindowResized},
 };
@@ -44,6 +45,27 @@ impl Default for UiWebViewBundle {
             handle: WebViewHandle(None),
             marker: WebViewMarker,
         }
+    }
+}
+
+pub trait WebViewDespawning {
+    fn despawn_webview(&mut self, entity: Entity);
+}
+
+impl WebViewDespawning for Commands<'_, '_> {
+    fn despawn_webview(&mut self, entity: Entity) {
+        self.add(move |world: &mut World| {
+            let registry = world
+                .get_non_send_resource::<WebViewRegistry>()
+                .unwrap_or_else(|| {
+                    panic!("WebView Registry not foundl have you loaded `WebViewPlugin`")
+                });
+            let handle = world.entity(entity).get::<WebViewHandle>().unwrap();
+            //handle.map(|x| registry[x].);
+            // TODO close it here
+            println!("Despawning here");
+            world.despawn(entity);
+        })
     }
 }
 
@@ -117,10 +139,6 @@ impl WebViewPlugin {
                     registry.push(webview);
                 }
             });
-    }
-
-    fn _on_webview_despawn() {
-        todo!("Despawn wry webview attached to bundle")
     }
 
     fn on_webview_resize(
