@@ -1,13 +1,16 @@
+use reactivity::WebViewReactivityPlugin;
 use wry::{
     raw_window_handle::{ActiveHandle, WindowHandle},
     WebView, WebViewBuilder,
 };
 
 use bevy::{
-    ecs::system::Command,
     prelude::*,
-    window::{PrimaryWindow, RawHandleWrapper, WindowResized},
+    window::{RawHandleWrapper, WindowResized},
 };
+
+pub mod ipc;
+mod reactivity;
 
 pub struct WebViewPlugin;
 
@@ -21,7 +24,7 @@ pub enum WebViewLocation {
 pub struct WebViewMarker;
 
 #[derive(DerefMut, Deref)]
-struct WebViewRegistry {
+pub struct WebViewRegistry {
     webviews: Vec<WebView>,
 }
 
@@ -48,7 +51,13 @@ impl Default for UiWebViewBundle {
     }
 }
 
+/**
+ * A simple trait to emulate a custom command for despawning `UiWebViewBundle`s
+ */
 pub trait WebViewDespawning {
+    /**
+     * Despawns `UiWebViewBundle`s and cleans up the associated `wry` `WebView`
+     */
     fn despawn_webview(&mut self, entity: Entity);
 }
 
@@ -58,11 +67,10 @@ impl WebViewDespawning for Commands<'_, '_> {
             let registry = world
                 .get_non_send_resource::<WebViewRegistry>()
                 .unwrap_or_else(|| {
-                    panic!("WebView Registry not foundl have you loaded `WebViewPlugin`")
+                    panic!("WebView Registry not found; have you loaded `WebViewPlugin`")
                 });
             let handle = world.entity(entity).get::<WebViewHandle>().unwrap();
-            //handle.map(|x| registry[x].);
-            // TODO close it here
+            // TODO close it here -- Waiting on Tauri/Wry folks
             println!("Despawning here");
             world.despawn(entity);
         })
@@ -72,16 +80,8 @@ impl WebViewDespawning for Commands<'_, '_> {
 impl Plugin for WebViewPlugin {
     fn build(&self, app: &mut App) {
         app.insert_non_send_resource(WebViewRegistry { webviews: vec![] })
-            .add_systems(
-                Update,
-                (
-                    Self::on_webview_spawn,
-                    Self::on_webview_resize,
-                    Self::on_webview_reposition,
-                    Self::on_webview_redirect,
-                    Self::on_window_resize,
-                ),
-            );
+            .add_plugins(WebViewReactivityPlugin)
+            .add_systems(Update, Self::on_webview_spawn);
     }
 }
 
@@ -100,117 +100,34 @@ impl WebViewPlugin {
             With<WebViewMarker>,
         >,
     ) {
-        let _ = window_handle
-            .get_single()
-            .map(|x| x.window_handle)
-            .map(|window_handle| {
-                for (mut handle, location, size, position) in
-                    query.iter_mut().filter(|(x, _, _, _)| x.is_none())
-                // && v.is_visible())
-                {
-                    let size = size.size();
-                    let final_position = (
-                        (position.translation().x - size.x / 2.0) as i32,
-                        (position.translation().y - size.y / 2.0) as i32,
-                        //((window_resolution.height() - position.translation().y) - size.y / 2.0)
-                        //    as i32,
-                    );
-
-                    //println!("{:?}", final_position == (0, 320));
-                    //(0, 320); // Uncommenting this line fixes the issue apparently. Why is
-                    // completely beyond me.
-                    //let final_position = (0, 320);
-                    let borrowed_handle =
-                        unsafe { &WindowHandle::borrow_raw(window_handle, ActiveHandle::new()) };
-                    let webview = WebViewBuilder::new_as_child(&borrowed_handle)
-                        .with_position(final_position)
-                        .with_transparent(true)
-                        .with_size((size.x as u32, size.y as u32));
-
-                    let webview = match location {
-                        WebViewLocation::Url(url) => webview.with_url(url),
-                        WebViewLocation::Html(html) => webview.with_html(html),
-                    }
-                    .unwrap()
-                    .build()
-                    .unwrap();
-
-                    *handle = WebViewHandle(Some(registry.len()));
-                    registry.push(webview);
-                }
-            });
-    }
-
-    fn on_webview_resize(
-        registry: NonSendMut<WebViewRegistry>,
-        query: Query<(&WebViewHandle, &Node), (With<WebViewMarker>, Changed<Node>)>,
-    ) {
-        for (handle, size) in query.iter() {
-            handle.map(|x| {
-                registry
-                    .get(x)
-                    .map(|webview| webview.set_size((size.size().x as u32, size.size().y as u32)))
-            });
-        }
-    }
-
-    fn on_webview_reposition(
-        registry: NonSendMut<WebViewRegistry>,
-        query: Query<
-            (&WebViewHandle, &GlobalTransform, &Node),
-            (With<WebViewMarker>, Changed<GlobalTransform>),
-        >,
-    ) {
-        for (handle, position, size) in query.iter() {
-            let size = size.size();
-            handle.map(|x| {
-                registry.get(x).map(|webview| {
-                    let final_position = (
-                        (position.translation().x - size.x / 2.0) as i32,
-                        (position.translation().y - size.y / 2.0) as i32,
-                        //((window_resolution.height() - position.translation().y) - size.y / 2.0) as i32,
-                    );
-                    webview.set_position(final_position)
-                })
-            });
-        }
-    }
-
-    fn on_webview_redirect(
-        registry: NonSendMut<WebViewRegistry>,
-        query: Query<
-            (&WebViewHandle, &WebViewLocation),
-            (With<WebViewMarker>, Changed<WebViewLocation>),
-        >,
-    ) {
-        for (handle, location) in query.iter() {
-            handle.map(|x| {
-                registry.get(x).map(|webview| match location {
-                    WebViewLocation::Url(url) => webview.load_url(url),
-                    WebViewLocation::Html(_html) => {
-                        // TODO Implement HTML loading past builder
-                    }
-                })
-            });
-        }
-    }
-
-    fn on_window_resize(
-        e: EventReader<WindowResized>,
-        registry: NonSendMut<WebViewRegistry>,
-        query: Query<(&WebViewHandle, &Node, &GlobalTransform), With<WebViewHandle>>,
-    ) {
-        if !e.is_empty() {
-            for (handle, size, position) in &query {
+        if let Ok(window_handle) = window_handle.get_single().map(|x| x.window_handle) {
+            for (mut handle, location, size, position) in
+                query.iter_mut().filter(|(x, _, _, _)| x.is_none())
+            // && v.is_visible())
+            {
                 let size = size.size();
                 let final_position = (
                     (position.translation().x - size.x / 2.0) as i32,
                     (position.translation().y - size.y / 2.0) as i32,
                 );
-                handle
-                    .map(|x| registry.get(x))
-                    .flatten()
-                    .map(|webview| webview.set_position(final_position));
+
+                let borrowed_handle =
+                    unsafe { &WindowHandle::borrow_raw(window_handle, ActiveHandle::new()) };
+                let webview = WebViewBuilder::new_as_child(&borrowed_handle)
+                    .with_position(final_position)
+                    .with_transparent(true)
+                    .with_size((size.x as u32, size.y as u32));
+
+                let webview = match location {
+                    WebViewLocation::Url(url) => webview.with_url(url),
+                    WebViewLocation::Html(html) => webview.with_html(html),
+                }
+                .unwrap()
+                .build()
+                .unwrap();
+
+                *handle = WebViewHandle(Some(registry.len()));
+                registry.push(webview);
             }
         }
     }
