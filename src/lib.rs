@@ -143,7 +143,7 @@ impl WebViewPlugin {
                             } else if req.uri().to_string().starts_with("bevy://fetch/")
                                 && req.method() == Method::GET
                             {
-                                match req.uri().to_string().split_at(12).1.parse::<Uuid>() {
+                                match req.uri().to_string().split_at(13).1.parse::<u128>() {
                                     Ok(x) => {
                                         let _ =
                                             fsender_cloned.send((WebViewHandle(Some(len)), x, res));

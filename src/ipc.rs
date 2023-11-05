@@ -25,19 +25,19 @@ pub(super) struct WryMessageSender(Sender<(WebViewHandle, Vec<u8>)>);
 struct WryMessageReceiver(Receiver<(WebViewHandle, Vec<u8>)>);
 
 #[derive(Resource, Deref, DerefMut)]
-pub(super) struct WryFetchSender(Sender<(WebViewHandle, Uuid, RequestAsyncResponder)>);
+pub(super) struct WryFetchSender(Sender<(WebViewHandle, u128, RequestAsyncResponder)>);
 
 #[derive(Resource, Deref, DerefMut)]
-struct WryFetchReceiver(Receiver<(WebViewHandle, Uuid, RequestAsyncResponder)>);
+struct WryFetchReceiver(Receiver<(WebViewHandle, u128, RequestAsyncResponder)>);
 
 #[derive(Resource, Deref, DerefMut)]
-struct WryMessageRegistry(HashMap<(WebViewHandle, Uuid), Vec<u8>>);
+struct WryMessageRegistry(HashMap<(WebViewHandle, u128), Vec<u8>>);
 
 impl Plugin for WebViewIpcPlugin {
     fn build(&self, app: &mut App) {
         let (sender, receiver) = channel::unbounded::<(WebViewHandle, Vec<u8>)>();
         let (fsender, freceiver) =
-            channel::unbounded::<(WebViewHandle, Uuid, RequestAsyncResponder)>();
+            channel::unbounded::<(WebViewHandle, u128, RequestAsyncResponder)>();
         app.add_event::<SendBytes>()
             .insert_resource(WryMessageSender(sender))
             .insert_resource(WryMessageReceiver(receiver))
@@ -66,9 +66,11 @@ impl WebViewIpcPlugin {
     ) {
         for SendBytes(handle, data) in reader.iter() {
             if let Some(webview) = handle.map(|x| registry.get(x)).flatten() {
-                let queue_id = Uuid::new_v4();
+                let queue_id = Uuid::new_v4().to_u128_le();
                 mregistry.insert((handle.to_owned(), queue_id), data.to_owned());
-                let _ = webview.evaluate_script(&format!("window.fetchMessage({})", queue_id));
+                webview
+                    .evaluate_script(&format!("window.fetchMessage('{}')", queue_id))
+                    .unwrap();
             }
         }
     }
@@ -81,6 +83,7 @@ impl WebViewIpcPlugin {
         for (ref handle, uuid, responder) in receiver.try_iter() {
             match (&cloned_registry).get(&(handle.clone(), uuid)) {
                 Some(data) => {
+                    println!("{}, {:?}", uuid, data);
                     responder.respond(Response::builder().status(200).body(data.clone()).unwrap());
                     registry.remove(&(handle.clone(), uuid));
                 }
