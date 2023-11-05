@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_wry_webview::{
-    UiWebViewBundle, WebViewDespawning, WebViewLocation, WebViewMarker, WebViewPlugin,
+    ipc::{SendBytes, WryMessage},
+    UiWebViewBundle, WebViewDespawning, WebViewHandle, WebViewLocation, WebViewMarker,
+    WebViewPlugin,
 };
 
 fn main() {
@@ -9,6 +11,8 @@ fn main() {
         .add_plugins(WebViewPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, moving_webview)
+        //.add_systems(Update, button_system)
+        .add_systems(Update, handle_message)
         .run();
 }
 
@@ -18,6 +22,34 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn(ButtonBundle {
+                style: Style {
+                    width: Val::Px(150.0),
+                    height: Val::Px(65.0),
+                    border: UiRect::all(Val::Px(5.0)),
+                    // horizontally center child text
+                    justify_content: JustifyContent::Center,
+                    // vertically center child text
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                border_color: BorderColor(Color::BLACK),
+                background_color: NORMAL_BUTTON.into(),
+                ..default()
+            });
+        });
+
     commands.spawn(UiWebViewBundle {
         node_bundle: NodeBundle {
             style: Style {
@@ -30,43 +62,7 @@ fn setup(
             },
             ..Default::default()
         },
-        location: WebViewLocation::Html(
-            r#"
-<!DOCTYPE html>
-<html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-    </head>
-    <body>
-        <div id="ele">
-            <div>Positioned element on transparent background</div>
-        </div>
-    </body>
-    <style>
-html, body {
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(255, 192, 203, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#ele {
-    background-color: blue;
-    color: white;
-    width: 50%;
-    height: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-    </style>
-</html>
-                      "#
-            .to_owned(),
-        ),
+        location: WebViewLocation::Html(include_str!("./cube.html").to_owned()),
         ..Default::default()
     });
 
@@ -111,4 +107,41 @@ fn moving_webview(time: Res<Time>, mut query: Query<&mut Style, With<WebViewMark
             ..style.clone()
         };
     });
+}
+
+const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
+const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
+
+fn _button_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor, &mut BorderColor),
+        (Changed<Interaction>, With<Button>),
+    >,
+    query: Query<&WebViewHandle>,
+    mut writer: EventWriter<SendBytes>,
+) {
+    for (interaction, mut color, mut border_color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = PRESSED_BUTTON.into();
+                border_color.0 = Color::RED;
+                writer.send(SendBytes(query.single().clone(), vec![]));
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                border_color.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::BLACK;
+            }
+        }
+    }
+}
+
+fn handle_message(mut reader: EventReader<WryMessage>) {
+    for WryMessage(_, data) in &mut reader {
+        println!("{}", String::from_utf8(data.to_owned()).unwrap());
+    }
 }

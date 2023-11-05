@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body>
+        <div id="ele">
+            <div id="inner">Positioned element on transparent background</div>
+            <button onclick="buttonClick();">Click me!</button>
+        </div>
+    </body>
+    <style>
+html, body {
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(255, 192, 203, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#ele {
+    background-color: blue;
+    color: white;
+    width: 50%;
+    height: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+    </style>
+    <script>
+        let counter = 0;
+        //window.processMessage = function(blob) {
+        //    document.getElementById("inner").textContent = blob.toString();
+        //}
+
+        function buttonClick() {
+            window.sendMessage('Clicked ' + ++counter + ' times');
+        }
+    </script>
+</html>

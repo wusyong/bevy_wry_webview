@@ -1,11 +1,16 @@
+use std::sync::mpsc::Sender;
+
+use ipc::{WebViewIpcPlugin, WryFetchSender, WryMessage, WryMessageSender};
 use reactivity::WebViewReactivityPlugin;
 use wry::{
+    http::{header::CONTENT_TYPE, Method, Response},
     raw_window_handle::{ActiveHandle, WindowHandle},
     WebView, WebViewBuilder,
 };
 
 use bevy::{
     prelude::*,
+    utils::Uuid,
     window::{RawHandleWrapper, WindowResized},
 };
 
@@ -28,7 +33,7 @@ pub struct WebViewRegistry {
     webviews: Vec<WebView>,
 }
 
-#[derive(Component, Deref, DerefMut)]
+#[derive(Component, Clone, Deref, DerefMut, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub struct WebViewHandle(Option<usize>);
 
 #[derive(Bundle)]
@@ -71,6 +76,7 @@ impl WebViewDespawning for Commands<'_, '_> {
                 });
             let handle = world.entity(entity).get::<WebViewHandle>().unwrap();
             // TODO close it here -- Waiting on Tauri/Wry folks
+            handle.map(|x| registry.get(x)).map(drop);
             println!("Despawning here");
             world.despawn(entity);
         })
@@ -80,7 +86,7 @@ impl WebViewDespawning for Commands<'_, '_> {
 impl Plugin for WebViewPlugin {
     fn build(&self, app: &mut App) {
         app.insert_non_send_resource(WebViewRegistry { webviews: vec![] })
-            .add_plugins(WebViewReactivityPlugin)
+            .add_plugins((WebViewReactivityPlugin, WebViewIpcPlugin))
             .add_systems(Update, Self::on_webview_spawn);
     }
 }
@@ -95,10 +101,11 @@ impl WebViewPlugin {
                 &WebViewLocation,
                 &Node,
                 &GlobalTransform,
-                //&ComputedVisibility,
             ),
             With<WebViewMarker>,
         >,
+        sender: Res<WryMessageSender>,
+        fsender: Res<WryFetchSender>,
     ) {
         if let Ok(window_handle) = window_handle.get_single().map(|x| x.window_handle) {
             for (mut handle, location, size, position) in
@@ -111,12 +118,47 @@ impl WebViewPlugin {
                     (position.translation().y - size.y / 2.0) as i32,
                 );
 
+                *handle = WebViewHandle(Some(registry.len()));
+
+                let sender_cloned = sender.clone();
+                let fsender_cloned = fsender.clone();
+                let len = registry.len();
+
                 let borrowed_handle =
                     unsafe { &WindowHandle::borrow_raw(window_handle, ActiveHandle::new()) };
                 let webview = WebViewBuilder::new_as_child(&borrowed_handle)
                     .with_position(final_position)
                     .with_transparent(true)
-                    .with_size((size.x as u32, size.y as u32));
+                    .with_size((size.x as u32, size.y as u32))
+                    .with_initialization_script(WebViewIpcPlugin::IPC_INIT_SCRIPT)
+                    .with_asynchronous_custom_protocol(
+                        "bevy".to_owned(),
+                        move |req, res| {
+                            if req.uri() == "bevy://send"
+                                || req.uri() == "bevy://send/" && req.method() == Method::POST
+                            {
+                                let _ = sender_cloned
+                                    .send((WebViewHandle(Some(len)), req.body().to_owned()));
+                                res.respond(Response::builder().status(200).body(vec![]).unwrap());
+                            } else if req.uri().to_string().starts_with("bevy://fetch/")
+                                && req.method() == Method::GET
+                            {
+                                match req.uri().to_string().split_at(12).1.parse::<Uuid>() {
+                                    Ok(x) => {
+                                        let _ =
+                                            fsender_cloned.send((WebViewHandle(Some(len)), x, res));
+                                    }
+                                    Err(_) => {
+                                        res.respond(
+                                            Response::builder().status(409).body(vec![]).unwrap(),
+                                        );
+                                    }
+                                }
+                            } else {
+                                res.respond(Response::builder().status(404).body(vec![]).unwrap());
+                            }
+                        }, //WebViewIpcPlugin::handle_ipc,
+                    );
 
                 let webview = match location {
                     WebViewLocation::Url(url) => webview.with_url(url),
@@ -126,7 +168,6 @@ impl WebViewPlugin {
                 .build()
                 .unwrap();
 
-                *handle = WebViewHandle(Some(registry.len()));
                 registry.push(webview);
             }
         }
