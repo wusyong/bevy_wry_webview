@@ -1,10 +1,10 @@
 window.fetchMessage = function(messageId) {
     const req = new XMLHttpRequest();
+    req.responseType = "arraybuffer";
     req.open("GET", "bevy://fetch/" + messageId, false);
 
-    req.onload = function(req) {
-        const blob = req.response;
-        document.querySelector('h1').textContent = req.status;
+    req.onload = function () {
+        const blob = new Uint8Array(req.response);
         window.processMessage(blob);
     };
 

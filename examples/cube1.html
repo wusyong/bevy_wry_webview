@@ -19,11 +19,11 @@
 
 <script>
     let count = document.getElementById("count");
-    window.processMessage = function(x) {
-        if(x == 1) {
+    window.processMessage = function (x) {
+        if (x[0] == 1) {
             count.textContent = "Bevy button pressed 1 time"
         } else {
-            count.textContent = "Bevy button pressed " + x + " times"
+            count.textContent = "Bevy button pressed " + x[0] + " times"
         }
     };
 </script>
