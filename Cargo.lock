@@ -1034,6 +1034,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "crossbeam",
+ "raw-window-handle",
  "wry",
 ]
 
@@ -5086,7 +5087,7 @@ dependencies = [
 [[package]]
 name = "wry"
 version = "0.34.2"
-source = "git+https://github.com/tauri-apps/wry?branch=raw-handle#781b86fe95b4a35fa67f40d8b772f16cfbd9b659"
+source = "git+https://github.com/tauri-apps/wry#783b14239d367fb932c0d9236b60808ab0a6ec63"
 dependencies = [
  "base64 0.21.5",
  "block",

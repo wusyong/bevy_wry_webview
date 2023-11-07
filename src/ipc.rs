@@ -3,10 +3,7 @@ use std::collections::HashMap;
 use crossbeam::{channel, Receiver, Sender};
 
 use bevy::{prelude::*, utils::Uuid};
-use wry::{
-    http::{header::CONTENT_TYPE, Request, Response},
-    RequestAsyncResponder,
-};
+use wry::{http::Response, RequestAsyncResponder};
 
 use crate::{WebViewHandle, WebViewRegistry};
 
@@ -83,7 +80,6 @@ impl WebViewIpcPlugin {
         for (ref handle, uuid, responder) in receiver.try_iter() {
             match (&cloned_registry).get(&(handle.clone(), uuid)) {
                 Some(data) => {
-                    println!("{}, {:?}", uuid, data);
                     responder.respond(Response::builder().status(200).body(data.clone()).unwrap());
                     registry.remove(&(handle.clone(), uuid));
                 }

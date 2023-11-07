@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.11.3"
-wry = { git = "https://github.com/tauri-apps/wry", branch = "raw-handle", default-features = false, features = ["file-drop", "objc-exception", "protocol", "transparent"] }
+wry = { git = "https://github.com/tauri-apps/wry", default-features = false, features = ["file-drop", "objc-exception", "protocol", "transparent"] }
 crossbeam = "0.7.3"
 raw-window-handle = "0.5"

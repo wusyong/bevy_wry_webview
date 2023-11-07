@@ -1,18 +1,15 @@
-use std::sync::mpsc::Sender;
-
-use ipc::{WebViewIpcPlugin, WryFetchSender, WryMessage, WryMessageSender};
+use ipc::{WebViewIpcPlugin, WryFetchSender, WryMessageSender};
 use reactivity::WebViewReactivityPlugin;
 use wry::{
-    http::{header::CONTENT_TYPE, Method, Response},
-    raw_window_handle::{ActiveHandle, WindowHandle},
+    http::{Method, Response},
     WebView, WebViewBuilder,
 };
 
 use bevy::{
     prelude::*,
-    utils::Uuid,
     window::{RawHandleWrapper, WindowResized},
 };
+use raw_window_handle::{ActiveHandle, WindowHandle};
 
 pub mod ipc;
 mod reactivity;
@@ -77,7 +74,6 @@ impl WebViewDespawning for Commands<'_, '_> {
             let handle = world.entity(entity).get::<WebViewHandle>().unwrap();
             // TODO close it here -- Waiting on Tauri/Wry folks
             handle.map(|x| registry.get(x)).map(drop);
-            println!("Despawning here");
             world.despawn(entity);
         })
     }
