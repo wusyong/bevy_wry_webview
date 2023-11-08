@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crossbeam::{channel, Receiver, Sender};
 
 use bevy::{prelude::*, utils::Uuid};
-use wry::{http::Response, RequestAsyncResponder};
 
 use crate::{WebViewHandle, WebViewRegistry};
 
@@ -22,10 +21,10 @@ pub(super) struct WryMessageSender(Sender<(WebViewHandle, Vec<u8>)>);
 struct WryMessageReceiver(Receiver<(WebViewHandle, Vec<u8>)>);
 
 #[derive(Resource, Deref, DerefMut)]
-pub(super) struct WryFetchSender(Sender<(WebViewHandle, u128, RequestAsyncResponder)>);
+pub(super) struct WryFetchSender(Sender<(WebViewHandle, u128, Sender<Vec<u8>>)>);
 
 #[derive(Resource, Deref, DerefMut)]
-struct WryFetchReceiver(Receiver<(WebViewHandle, u128, RequestAsyncResponder)>);
+struct WryFetchReceiver(Receiver<(WebViewHandle, u128, Sender<Vec<u8>>)>);
 
 #[derive(Resource, Deref, DerefMut)]
 struct WryMessageRegistry(HashMap<(WebViewHandle, u128), Vec<u8>>);
@@ -34,7 +33,7 @@ impl Plugin for WebViewIpcPlugin {
     fn build(&self, app: &mut App) {
         let (sender, receiver) = channel::unbounded::<(WebViewHandle, Vec<u8>)>();
         let (fsender, freceiver) =
-            channel::unbounded::<(WebViewHandle, u128, RequestAsyncResponder)>();
+            channel::unbounded::<(WebViewHandle, u128, Sender<Vec<u8>>)>();
         app.add_event::<SendBytes>()
             .insert_resource(WryMessageSender(sender))
             .insert_resource(WryMessageReceiver(receiver))
@@ -80,10 +79,10 @@ impl WebViewIpcPlugin {
         for (ref handle, uuid, responder) in receiver.try_iter() {
             match (&cloned_registry).get(&(handle.clone(), uuid)) {
                 Some(data) => {
-                    responder.respond(Response::builder().status(200).body(data.clone()).unwrap());
+                    responder.send(data.clone()).unwrap();
                     registry.remove(&(handle.clone(), uuid));
                 }
-                None => responder.respond(Response::builder().status(404).body(vec![]).unwrap()),
+                None => responder.send(vec![]).unwrap(),
             }
         }
     }

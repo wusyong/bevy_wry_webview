@@ -119,6 +119,8 @@ impl WebViewPlugin {
                 let sender_cloned = sender.clone();
                 let fsender_cloned = fsender.clone();
                 let len = registry.len();
+                let (data_tx, data_rx) = crossbeam::channel::unbounded();
+                let (protocol_tx, protocol_rx) = crossbeam::channel::unbounded();
 
                 let borrowed_handle =
                     unsafe { &WindowHandle::borrow_raw(window_handle, ActiveHandle::new()) };
@@ -130,6 +132,13 @@ impl WebViewPlugin {
                     .with_asynchronous_custom_protocol(
                         "bevy".to_owned(),
                         move |req, res| {
+                            let _ = protocol_tx.send((req, res)).unwrap();
+                        }, //WebViewIpcPlugin::handle_ipc,
+                    );
+
+                // async custom protocol thread
+                std::thread::spawn(move || {
+                    while let Ok((req, res)) = protocol_rx.recv() {
                             if req.uri() == "bevy://send"
                                 || req.uri() == "bevy://send/" && req.method() == Method::POST
                             {
@@ -141,8 +150,12 @@ impl WebViewPlugin {
                             {
                                 match req.uri().to_string().split_at(13).1.parse::<u128>() {
                                     Ok(x) => {
-                                        let _ =
-                                            fsender_cloned.send((WebViewHandle(Some(len)), x, res));
+                                        let _ = fsender_cloned.send((WebViewHandle(Some(len)), x, data_tx.clone()));
+
+                                        match data_rx.recv() {
+                                            Ok(data) if !data.is_empty() => res.respond(Response::builder().status(200).body(data).unwrap()),
+                                            _ => res.respond(Response::builder().status(404).body(vec![]).unwrap()),
+                                        }
                                     }
                                     Err(_) => {
                                         res.respond(
@@ -153,8 +166,9 @@ impl WebViewPlugin {
                             } else {
                                 res.respond(Response::builder().status(404).body(vec![]).unwrap());
                             }
-                        }, //WebViewIpcPlugin::handle_ipc,
-                    );
+                    }
+
+                });
 
                 let webview = match location {
                     WebViewLocation::Url(url) => webview.with_url(url),
